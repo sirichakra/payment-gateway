@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Checkout</title>
+  <style>
+    body { font-family: Arial; padding: 40px; }
+    input, button { padding: 8px; margin: 5px; }
+    .hidden { display: none; }
+  </style>
+</head>
+
+<body>
+<div data-test-id="checkout-container">
+
+  <!-- Order Summary -->
+  <div data-test-id="order-summary">
+    <h2>Complete Payment</h2>
+    <div>
+      <span>Amount: </span>
+      <span data-test-id="order-amount"></span>
+    </div>
+    <div>
+      <span>Order ID: </span>
+      <span data-test-id="order-id"></span>
+    </div>
+  </div>
+
+  <!-- Payment Methods -->
+  <div data-test-id="payment-methods">
+    <button data-test-id="method-upi" onclick="showUPI()">UPI</button>
+    <button data-test-id="method-card" onclick="showCard()">Card</button>
+  </div>
+
+  <!-- UPI Form -->
+  <form data-test-id="upi-form" class="hidden" onsubmit="payUPI(event)">
+    <input data-test-id="vpa-input" placeholder="user@bank" />
+    <button data-test-id="pay-button">Pay</button>
+  </form>
+
+  <!-- Card Form -->
+  <form data-test-id="card-form" class="hidden" onsubmit="payCard(event)">
+    <input data-test-id="card-number-input" placeholder="Card Number" />
+    <input data-test-id="expiry-input" placeholder="MM/YY" />
+    <input data-test-id="cvv-input" placeholder="CVV" />
+    <input data-test-id="cardholder-name-input" placeholder="Name" />
+    <button data-test-id="pay-button">Pay</button>
+  </form>
+
+  <!-- Processing -->
+  <div data-test-id="processing-state" class="hidden">
+    <span data-test-id="processing-message">Processing payment...</span>
+  </div>
+
+  <!-- Success -->
+  <div data-test-id="success-state" class="hidden">
+    <h2>Payment Successful!</h2>
+    <span data-test-id="payment-id"></span>
+    <div data-test-id="success-message">Your payment has been processed successfully</div>
+  </div>
+
+  <!-- Error -->
+  <div data-test-id="error-state" class="hidden">
+    <h2>Payment Failed</h2>
+    <span data-test-id="error-message">Payment could not be processed</span>
+    <button data-test-id="retry-button" onclick="location.reload()">Try Again</button>
+  </div>
+
+</div>
+
+<script>
+const orderId = new URLSearchParams(window.location.search).get("order_id");
+document.querySelector('[data-test-id="order-id"]').innerText = orderId;
+
+fetch("http://localhost:8000/api/v1/orders/" + orderId)
+  .then(r => r.json())
+  .then(d => {
+    document.querySelector('[data-test-id="order-amount"]').innerText = "₹" + (d.amount / 100);
+  });
+
+function showUPI() {
+  hideAll();
+  document.querySelector('[data-test-id="upi-form"]').classList.remove("hidden");
+}
+function showCard() {
+  hideAll();
+  document.querySelector('[data-test-id="card-form"]').classList.remove("hidden");
+}
+function hideAll() {
+  document.querySelector('[data-test-id="upi-form"]').classList.add("hidden");
+  document.querySelector('[data-test-id="card-form"]').classList.add("hidden");
+}
+
+function showProcessing() {
+  hideAll();
+  document.querySelector('[data-test-id="processing-state"]').classList.remove("hidden");
+}
+
+function payUPI(e) {
+  e.preventDefault();
+  const vpa = document.querySelector('[data-test-id="vpa-input"]').value;
+  processPayment({ method: "upi", vpa });
+}
+
+function payCard(e) {
+  e.preventDefault();
+  const card = {
+    number: document.querySelector('[data-test-id="card-number-input"]').value,
+    expiry_month: document.querySelector('[data-test-id="expiry-input"]').value.split("/")[0],
+    expiry_year: document.querySelector('[data-test-id="expiry-input"]').value.split("/")[1],
+    cvv: document.querySelector('[data-test-id="cvv-input"]').value,
+    holder_name: document.querySelector('[data-test-id="cardholder-name-input"]').value
+  };
+  processPayment({ method: "card", card });
+}
+
+function processPayment(data) {
+  showProcessing();
+
+  fetch("http://localhost:8000/api/v1/payments/public", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_id: orderId, ...data })
+  })
+  .then(r => r.json())
+  .then(p => {
+    if (!p.id) throw "failed";
+    pollPayment(p.id);
+  })
+  .catch(showError);
+}
+
+function pollPayment(paymentId) {
+  const interval = setInterval(() => {
+    fetch(`http://localhost:8000/api/v1/payments/${paymentId}/public`)
+      .then(r => r.json())
+      .then(p => {
+        if (p.status === "success") {
+          clearInterval(interval);
+          showSuccess(paymentId);
+        }
+        if (p.status === "failed") {
+          clearInterval(interval);
+          showError();
+        }
+      });
+  }, 2000);
+}
+
+
+function showSuccess(id) {
+  document.querySelector('[data-test-id="processing-state"]').classList.add("hidden");
+  document.querySelector('[data-test-id="success-state"]').classList.remove("hidden");
+  document.querySelector('[data-test-id="payment-id"]').innerText = id;
+}
+
+function showError() {
+  document.querySelector('[data-test-id="processing-state"]').classList.add("hidden");
+  document.querySelector('[data-test-id="error-state"]').classList.remove("hidden");
+}
+</script>
+
+</body>
+</html>
