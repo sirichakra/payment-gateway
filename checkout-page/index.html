@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Checkout</title>
@@ -13,150 +13,145 @@
 <body>
 <div data-test-id="checkout-container">
 
+  <h2>Complete Payment</h2>
+
   <!-- Order Summary -->
   <div data-test-id="order-summary">
-    <h2>Complete Payment</h2>
-    <div>
-      <span>Amount: </span>
-      <span data-test-id="order-amount"></span>
-    </div>
-    <div>
-      <span>Order ID: </span>
-      <span data-test-id="order-id"></span>
-    </div>
+    <div>Amount: <span data-test-id="order-amount">--</span></div>
+    <div>Order ID: <span data-test-id="order-id">--</span></div>
   </div>
 
   <!-- Payment Methods -->
   <div data-test-id="payment-methods">
-    <button data-test-id="method-upi" onclick="showUPI()">UPI</button>
-    <button data-test-id="method-card" onclick="showCard()">Card</button>
+    <button onclick="showUPI()">UPI</button>
+    <button onclick="showCard()">Card</button>
   </div>
 
-  <!-- UPI Form -->
-  <form data-test-id="upi-form" class="hidden" onsubmit="payUPI(event)">
-    <input data-test-id="vpa-input" placeholder="user@bank" />
-    <button data-test-id="pay-button">Pay</button>
+  <!-- UPI -->
+  <form id="upi-form" class="hidden" onsubmit="payUPI(event)">
+    <input id="vpa" placeholder="user@bank" required />
+    <button>Pay</button>
   </form>
 
-  <!-- Card Form -->
-  <form data-test-id="card-form" class="hidden" onsubmit="payCard(event)">
-    <input data-test-id="card-number-input" placeholder="Card Number" />
-    <input data-test-id="expiry-input" placeholder="MM/YY" />
-    <input data-test-id="cvv-input" placeholder="CVV" />
-    <input data-test-id="cardholder-name-input" placeholder="Name" />
-    <button data-test-id="pay-button">Pay</button>
+  <!-- Card -->
+  <form id="card-form" class="hidden" onsubmit="payCard(event)">
+    <input id="card-number" placeholder="Card Number" required />
+    <input id="expiry" placeholder="MM/YY" required />
+    <input id="cvv" placeholder="CVV" required />
+    <button>Pay</button>
   </form>
 
   <!-- Processing -->
-  <div data-test-id="processing-state" class="hidden">
-    <span data-test-id="processing-message">Processing payment...</span>
-  </div>
+  <div id="processing" class="hidden">Processing payment...</div>
 
   <!-- Success -->
-  <div data-test-id="success-state" class="hidden">
-    <h2>Payment Successful!</h2>
-    <span data-test-id="payment-id"></span>
-    <div data-test-id="success-message">Your payment has been processed successfully</div>
+  <div id="success" class="hidden">
+    <h3>Payment Successful</h3>
+    Payment ID: <span id="payment-id"></span>
   </div>
 
   <!-- Error -->
-  <div data-test-id="error-state" class="hidden">
-    <h2>Payment Failed</h2>
-    <span data-test-id="error-message">Payment could not be processed</span>
-    <button data-test-id="retry-button" onclick="location.reload()">Try Again</button>
+  <div id="error" class="hidden">
+    <h3>Payment Failed</h3>
+    <button onclick="location.reload()">Try Again</button>
   </div>
 
 </div>
 
 <script>
-const orderId = new URLSearchParams(window.location.search).get("order_id");
+const API = "http://localhost:8000";
+
+const params = new URLSearchParams(window.location.search);
+const orderId = params.get("order_id");
+
+if (!orderId) {
+  alert("Missing order_id in URL");
+  throw new Error("order_id missing");
+}
+
 document.querySelector('[data-test-id="order-id"]').innerText = orderId;
 
-fetch("http://localhost:8000/api/v1/orders/" + orderId)
+// Fetch order details
+fetch(`${API}/api/v1/orders/${orderId}`)
   .then(r => r.json())
-  .then(d => {
-    document.querySelector('[data-test-id="order-amount"]').innerText = "₹" + (d.amount / 100);
+  .then(o => {
+    document.querySelector('[data-test-id="order-amount"]').innerText =
+      "₹" + (o.amount / 100);
   });
+
+function hideAll() {
+  document.getElementById("upi-form").classList.add("hidden");
+  document.getElementById("card-form").classList.add("hidden");
+  document.getElementById("processing").classList.add("hidden");
+}
 
 function showUPI() {
   hideAll();
-  document.querySelector('[data-test-id="upi-form"]').classList.remove("hidden");
-}
-function showCard() {
-  hideAll();
-  document.querySelector('[data-test-id="card-form"]').classList.remove("hidden");
-}
-function hideAll() {
-  document.querySelector('[data-test-id="upi-form"]').classList.add("hidden");
-  document.querySelector('[data-test-id="card-form"]').classList.add("hidden");
+  document.getElementById("upi-form").classList.remove("hidden");
 }
 
-function showProcessing() {
+function showCard() {
   hideAll();
-  document.querySelector('[data-test-id="processing-state"]').classList.remove("hidden");
+  document.getElementById("card-form").classList.remove("hidden");
 }
 
 function payUPI(e) {
   e.preventDefault();
-  const vpa = document.querySelector('[data-test-id="vpa-input"]').value;
-  processPayment({ method: "upi", vpa });
+  processPayment({
+    method: "upi",
+    vpa: document.getElementById("vpa").value
+  });
 }
 
 function payCard(e) {
   e.preventDefault();
-  const card = {
-    number: document.querySelector('[data-test-id="card-number-input"]').value,
-    expiry_month: document.querySelector('[data-test-id="expiry-input"]').value.split("/")[0],
-    expiry_year: document.querySelector('[data-test-id="expiry-input"]').value.split("/")[1],
-    cvv: document.querySelector('[data-test-id="cvv-input"]').value,
-    holder_name: document.querySelector('[data-test-id="cardholder-name-input"]').value
-  };
-  processPayment({ method: "card", card });
+  const [m, y] = document.getElementById("expiry").value.split("/");
+  processPayment({
+    method: "card",
+    card: {
+      number: document.getElementById("card-number").value,
+      expiry_month: m,
+      expiry_year: y
+    }
+  });
 }
 
-function processPayment(data) {
-  showProcessing();
+function processPayment(payload) {
+  hideAll();
+  document.getElementById("processing").classList.remove("hidden");
 
-  fetch("http://localhost:8000/api/v1/payments/public", {
+  fetch(`${API}/api/v1/payments/public`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order_id: orderId, ...data })
+    body: JSON.stringify({ order_id: orderId, ...payload })
   })
-  .then(r => r.json())
-  .then(p => {
-    if (!p.id) throw "failed";
-    pollPayment(p.id);
-  })
-  .catch(showError);
+    .then(r => r.json())
+    .then(p => pollPayment(p.id))
+    .catch(showError);
 }
 
-function pollPayment(paymentId) {
-  const interval = setInterval(() => {
-    fetch(`http://localhost:8000/api/v1/payments/${paymentId}/public`)
+function pollPayment(id) {
+  const i = setInterval(() => {
+    fetch(`${API}/api/v1/payments/${id}/public`)
       .then(r => r.json())
       .then(p => {
         if (p.status === "success") {
-          clearInterval(interval);
-          showSuccess(paymentId);
+          clearInterval(i);
+          document.getElementById("processing").classList.add("hidden");
+          document.getElementById("success").classList.remove("hidden");
+          document.getElementById("payment-id").innerText = id;
         }
         if (p.status === "failed") {
-          clearInterval(interval);
+          clearInterval(i);
           showError();
         }
       });
   }, 2000);
 }
 
-
-function showSuccess(id) {
-  document.querySelector('[data-test-id="processing-state"]').classList.add("hidden");
-  document.querySelector('[data-test-id="success-state"]').classList.remove("hidden");
-  document.querySelector('[data-test-id="payment-id"]').innerText = id;
-}
-
 function showError() {
-  document.querySelector('[data-test-id="processing-state"]').classList.add("hidden");
-  document.querySelector('[data-test-id="error-state"]').classList.remove("hidden");
+  hideAll();
+  document.getElementById("error").classList.remove("hidden");
 }
 </script>
 

@@ -11,14 +11,18 @@ import {
 
 const router = express.Router();
 
+/**
+ * CREATE PAYMENT (AUTHENTICATED)
+ */
 router.post("/api/v1/payments", auth, async (req, res) => {
   const { order_id, method, vpa, card } = req.body;
 
-  // Order check
+  // Check order
   const orderRes = await pool.query(
     "SELECT * FROM orders WHERE id=$1 AND merchant_id=$2",
     [order_id, req.merchant.id]
   );
+
   if (!orderRes.rowCount) {
     return res.status(404).json({
       error: { code: "NOT_FOUND_ERROR", description: "Order not found" }
@@ -27,8 +31,9 @@ router.post("/api/v1/payments", auth, async (req, res) => {
 
   const order = orderRes.rows[0];
 
-  // Method-specific validation
+  // Method validation
   let paymentData = {};
+
   if (method === "upi") {
     if (!isValidVPA(vpa)) {
       return res.status(400).json({
@@ -40,16 +45,19 @@ router.post("/api/v1/payments", auth, async (req, res) => {
 
   if (method === "card") {
     const { number, expiry_month, expiry_year } = card || {};
+
     if (!isValidCardNumber(number)) {
       return res.status(400).json({
         error: { code: "INVALID_CARD", description: "Card validation failed" }
       });
     }
+
     if (!isValidExpiry(expiry_month, expiry_year)) {
       return res.status(400).json({
         error: { code: "EXPIRED_CARD", description: "Card expiry date invalid" }
       });
     }
+
     paymentData.card_network = detectNetwork(number);
     paymentData.card_last4 = number.slice(-4);
   }
@@ -58,7 +66,10 @@ router.post("/api/v1/payments", auth, async (req, res) => {
   let payId;
   while (true) {
     payId = genId("pay");
-    const check = await pool.query("SELECT id FROM payments WHERE id=$1", [payId]);
+    const check = await pool.query(
+      "SELECT id FROM payments WHERE id=$1",
+      [payId]
+    );
     if (!check.rowCount) break;
   }
 
@@ -82,14 +93,14 @@ router.post("/api/v1/payments", auth, async (req, res) => {
     ]
   );
 
-  // Processing delay
+  // Simulated processing delay
   const delay = process.env.TEST_MODE === "true"
     ? Number(process.env.TEST_PROCESSING_DELAY || 1000)
     : Math.floor(Math.random() * 5000) + 5000;
 
   await new Promise(r => setTimeout(r, delay));
 
-  // Success / failure
+  // Decide success/failure
   let success;
   if (process.env.TEST_MODE === "true") {
     success = process.env.TEST_PAYMENT_SUCCESS !== "false";
@@ -103,6 +114,11 @@ router.post("/api/v1/payments", auth, async (req, res) => {
     await pool.query(
       "UPDATE payments SET status='success', updated_at=NOW() WHERE id=$1",
       [payId]
+    );
+
+    await pool.query(
+      "UPDATE orders SET status='paid', updated_at=NOW() WHERE id=$1",
+      [order.id]
     );
   } else {
     await pool.query(
@@ -118,15 +134,20 @@ router.post("/api/v1/payments", auth, async (req, res) => {
     );
   }
 
-  const { rows } = await pool.query("SELECT * FROM payments WHERE id=$1", [payId]);
+  const { rows } = await pool.query(
+    "SELECT * FROM payments WHERE id=$1",
+    [payId]
+  );
+
   res.status(201).json(rows[0]);
 });
 
-// PUBLIC payment endpoint for checkout
+/**
+ * CREATE PAYMENT (PUBLIC – FOR CHECKOUT PAGE)
+ */
 router.post("/api/v1/payments/public", async (req, res) => {
   const { order_id, method, vpa, card } = req.body;
 
-  // Find order
   const orderRes = await pool.query(
     "SELECT * FROM orders WHERE id=$1",
     [order_id]
@@ -140,8 +161,8 @@ router.post("/api/v1/payments/public", async (req, res) => {
 
   const order = orderRes.rows[0];
 
-  // ---- SAME LOGIC AS AUTH PAYMENT ----
   let paymentData = {};
+
   if (method === "upi") {
     if (!isValidVPA(vpa)) {
       return res.status(400).json({
@@ -153,21 +174,23 @@ router.post("/api/v1/payments/public", async (req, res) => {
 
   if (method === "card") {
     const { number, expiry_month, expiry_year } = card || {};
+
     if (!isValidCardNumber(number)) {
       return res.status(400).json({
         error: { code: "INVALID_CARD", description: "Card validation failed" }
       });
     }
+
     if (!isValidExpiry(expiry_month, expiry_year)) {
       return res.status(400).json({
         error: { code: "EXPIRED_CARD", description: "Card expiry date invalid" }
       });
     }
+
     paymentData.card_network = detectNetwork(number);
     paymentData.card_last4 = number.slice(-4);
   }
 
-  // Generate payment ID
   let payId;
   while (true) {
     payId = genId("pay");
@@ -197,13 +220,17 @@ router.post("/api/v1/payments/public", async (req, res) => {
     ]
   );
 
-  // Simulate processing
   const delay = Number(process.env.TEST_PROCESSING_DELAY || 1000);
   await new Promise(r => setTimeout(r, delay));
 
   await pool.query(
     "UPDATE payments SET status='success', updated_at=NOW() WHERE id=$1",
     [payId]
+  );
+
+  await pool.query(
+    "UPDATE orders SET status='paid', updated_at=NOW() WHERE id=$1",
+    [order.id]
   );
 
   const { rows } = await pool.query(
@@ -214,8 +241,20 @@ router.post("/api/v1/payments/public", async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
+router.get("/payments", async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT id, amount, status, created_at
+    FROM payments
+    ORDER BY created_at DESC
+    LIMIT 20
+  `);
 
+  res.json(rows);
+});
 
+/**
+ * FETCH PAYMENT (AUTH)
+ */
 router.get("/api/v1/payments/:id", auth, async (req, res) => {
   const { id } = req.params;
 
@@ -226,16 +265,18 @@ router.get("/api/v1/payments/:id", auth, async (req, res) => {
 
   if (!rows.length) {
     return res.status(404).json({
-      error: {
-        code: "NOT_FOUND_ERROR",
-        description: "Payment not found"
-      }
+      error: { code: "NOT_FOUND_ERROR", description: "Payment not found" }
     });
   }
 
   res.json(rows[0]);
 });
 
+
+
+/**
+ * FETCH PAYMENT STATUS (PUBLIC)
+ */
 router.get("/api/v1/payments/:id/public", async (req, res) => {
   const { id } = req.params;
 
@@ -252,6 +293,5 @@ router.get("/api/v1/payments/:id/public", async (req, res) => {
 
   res.json(rows[0]);
 });
-
 
 export default router;

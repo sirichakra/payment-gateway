@@ -4,6 +4,7 @@ npm-debug.log
 
 # Env files
 .env
+.env.local
 .env.*
 
 # Docker

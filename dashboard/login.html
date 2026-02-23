@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Merchant Login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h2>Merchant Login</h2>
+
+<div class="login-box">
+  <input id="apiKey" placeholder="API Key" />
+  <input id="apiSecret" placeholder="API Secret" />
+  <button onclick="login()">Login</button>
+
+  <p id="error" style="color:red; display:none;">
+    Invalid API credentials
+  </p>
+  <button onclick="logout()">Logout</button>
+</div>
+
+<script>
+function login() {
+  const apiKey = document.getElementById("apiKey").value;
+  const apiSecret = document.getElementById("apiSecret").value;
+
+  fetch("http://localhost:8000/api/v1/orders", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": apiKey,
+      "X-Api-Secret": apiSecret
+    },
+    body: JSON.stringify({ amount: 100 })
+  })
+  .then(res => {
+    if (!res.ok) throw "fail";
+    localStorage.setItem("apiKey", apiKey);
+    localStorage.setItem("apiSecret", apiSecret);
+    window.location.href = "index.html";
+  })
+  .catch(() => {
+    document.getElementById("error").style.display = "block";
+  });
+}
+
+function logout() {
+  localStorage.clear();
+  window.location.href = "login.html";
+}
+</script>
+
+</body>
+</html>

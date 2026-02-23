@@ -1,3 +1,7 @@
+import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 
@@ -22,6 +26,9 @@ app.use(orders);
 app.use(payments);
 app.use(testRoutes);
 
+// seedMerchant().catch(err => {
+//   console.error("Seed failed:", err.message);
+// });
 await seedMerchant();
 
 app.listen(8000, () => {

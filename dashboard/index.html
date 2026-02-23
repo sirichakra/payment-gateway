@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Merchant Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<h1>Payment Dashboard</h1>
+
+<div class="stats">
+  <div class="card">
+    <h3>Total Payments</h3>
+    <p id="total">0</p>
+  </div>
+
+  <div class="card success">
+    <h3>Successful</h3>
+    <p id="success">0</p>
+  </div>
+
+  <div class="card failed">
+    <h3>Failed</h3>
+    <p id="failed">0</p>
+  </div>
+</div>
+
+<h2>Recent Transactions</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Payment ID</th>
+      <th>Amount</th>
+      <th>Status</th>
+      <th>Date</th>
+    </tr>
+  </thead>
+  <tbody id="transactions"></tbody>
+</table>
+
+<script src="script.js"></script>
+</body>
+</html>

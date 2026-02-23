@@ -29,3 +29,9 @@ It supports merchant authentication, order creation, UPI/Card payments, and a ho
 ## How to Run
 ```bash
 docker-compose up -d --build
+
+
+Dashboard UI is available in the `dashboard/` folder with:
+- index.html (main dashboard)
+- login.html (optional admin login)
+- transactions.html (detailed transactions view)
